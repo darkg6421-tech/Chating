@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+  <title>Whisper · P2P Encrypted Chat</title>
+  <style>
+    :root {
+      --bg: #0b0f15;
+      --surface: #1a2129;
+      --primary: #3b82f6;
+      --text: #eef2f6;
+      --bubble-me: #3b82f6;
+      --bubble-other: #2a333d;
+      --border: #2e3a46;
+    }
+    .light-mode {
+      --bg: #f5f7fa;
+      --surface: #ffffff;
+      --primary: #2563eb;
+      --text: #1e293b;
+      --bubble-me: #2563eb;
+      --bubble-other: #e2e8f0;
+      --border: #cbd5e1;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      transition: background 0.2s;
+    }
+    /* Header */
+    .app-header {
+      background: var(--surface);
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(10px);
+      background: color-mix(in srgb, var(--surface) 80%, transparent);
+    }
+    .app-header h1 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      background: linear-gradient(135deg, #3b82f6, #a855f7);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .header-actions {
+      display: flex;
+      gap: 12px;
+    }
+    .icon-btn {
+      background: none;
+      border: none;
+      color: var(--text);
+      font-size: 22px;
+      cursor: pointer;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      transition: 0.2s;
+    }
+    .icon-btn:hover { background: var(--border); }
+    /* Connection status */
+    .status-bar {
+      padding: 10px 20px;
+      background: color-mix(in srgb, var(--surface) 60%, transparent);
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ef4444;
+    }
+    .status-dot.connected { background: #10b981; }
+    /* Chat area */
+    .chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .message-row {
+      display: flex;
+      max-width: 85%;
+    }
+    .message-row.me { align-self: flex-end; }
+    .message-row.other { align-self: flex-start; }
+    .message-bubble {
+      padding: 12px 16px;
+      border-radius: 22px;
+      word-break: break-word;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .me .message-bubble {
+      background: var(--bubble-me);
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+    .other .message-bubble {
+      background: var(--bubble-other);
+      border-bottom-left-radius: 4px;
+    }
+    .message-time {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-top: 4px;
+      text-align: right;
+    }
+    /* Input area */
+    .input-area {
+      background: var(--surface);
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .input-area input {
+      flex: 1;
+      padding: 14px 18px;
+      border-radius: 30px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 16px;
+      outline: none;
+    }
+    .input-area input:focus { border-color: var(--primary); }
+    .send-btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      width: 52px;
+      height: 52px;
+      border-radius: 30px;
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* Setup overlay */
+    .overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+    .setup-card {
+      background: var(--surface);
+      max-width: 400px;
+      width: 100%;
+      padding: 32px 24px;
+      border-radius: 36px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+    .setup-card h2 { margin-bottom: 16px; }
+    .setup-card p { opacity: 0.8; margin-bottom: 24px; }
+    .btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 16px 24px;
+      border-radius: 40px;
+      font-weight: 600;
+      font-size: 18px;
+      width: 100%;
+      cursor: pointer;
+      margin-bottom: 16px;
+    }
+    .link-box {
+      background: var(--bg);
+      padding: 16px;
+      border-radius: 20px;
+      font-family: monospace;
+      font-size: 14px;
+      word-break: break-all;
+      margin: 16px 0;
+      border: 1px solid var(--border);
+    }
+    .copy-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 20px;
+      right: 20px;
+      background: #1e293b;
+      color: white;
+      padding: 14px;
+      border-radius: 40px;
+      text-align: center;
+      opacity: 0;
+      transition: 0.3s;
+      pointer-events: none;
+      z-index: 200;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+<div id="toast" class="toast"></div>
+
+<!-- Setup Overlay -->
+<div id="setupOverlay" class="overlay">
+  <div class="setup-card">
+    <h2>🔒 Encrypted P2P Chat</h2>
+    <p>No server. No logs. Direct peer-to-peer.</p>
+    <button class="btn" id="createRoomBtn">➕ Create New Room</button>
+    <div style="margin:20px 0; opacity:0.5;">— OR —</div>
+    <input type="text" id="joinInput" placeholder="Paste invite link here" style="width:100%; padding:16px; border-radius:40px; border:1px solid var(--border); background:var(--bg); color:var(--text); margin-bottom:16px;">
+    <button class="btn" id="joinRoomBtn" style="background:#10b981;">🔗 Join Room</button>
+    <div id="inviteLinkContainer" style="display:none; margin-top:20px;">
+      <p style="margin-bottom:10px;">📨 Share this link with peer:</p>
+      <div class="link-box" id="inviteLinkDisplay"></div>
+      <button class="copy-btn" id="copyInviteBtn">📋 Copy Link</button>
+    </div>
+  </div>
+</div>
+
+<!-- Main Chat UI -->
+<div class="app-header">
+  <h1>💬 Whisper</h1>
+  <div class="header-actions">
+    <button class="icon-btn" id="themeToggle">🌙</button>
+    <button class="icon-btn" id="leaveRoomBtn">🚪</button>
+  </div>
+</div>
+<div class="status-bar">
+  <span class="status-dot" id="connDot"></span>
+  <span id="statusText">Disconnected</span>
+</div>
+<div class="chat-container" id="chatContainer">
+  <!-- Messages will appear here -->
+</div>
+<div class="input-area">
+  <input type="text" id="messageInput" placeholder="Type a message..." disabled>
+  <button class="send-btn" id="sendBtn" disabled>➤</button>
+</div>
+
+<script>
+  (function(){
+    "use strict";
+
+    // ---------- Configuration ----------
+    const RTCPeerConnection = window.RTCPeerConnection || window.mozRTCPeerConnection || window.webkitRTCPeerConnection;
+    const RTCSessionDescription = window.RTCSessionDescription || window.mozRTCSessionDescription;
+    const RTCIceCandidate = window.RTCIceCandidate || window.mozRTCIceCandidate;
+
+    // Global state
+    let localConnection = null;
+    let dataChannel = null;
+    let isInitiator = false;
+    let roomId = null;
+    let connected = false;
+    let messages = [];
+
+    // DOM Elements
+    const setupOverlay = document.getElementById('setupOverlay');
+    const createRoomBtn = document.getElementById('createRoomBtn');
+    const joinRoomBtn = document.getElementById('joinRoomBtn');
+    const joinInput = document.getElementById('joinInput');
+    const inviteLinkContainer = document.getElementById('inviteLinkContainer');
+    const inviteLinkDisplay = document.getElementById('inviteLinkDisplay');
+    const copyInviteBtn = document.getElementById('copyInviteBtn');
+    const statusText = document.getElementById('statusText');
+    const connDot = document.getElementById('connDot');
+    const chatContainer = document.getElementById('chatContainer');
+    const messageInput = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+    const themeToggle = document.getElementById('themeToggle');
+    const toast = document.getElementById('toast');
+
+    // ---------- Helpers ----------
+    function showToast(msg, isErr = false) {
+      toast.textContent = msg;
+      toast.style.background = isErr ? '#dc2626' : '#1e293b';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    function updateConnectionStatus(connectedStatus) {
+      connected = connectedStatus;
+      if (connected) {
+        statusText.textContent = 'Connected (P2P Encrypted)';
+        connDot.classList.add('connected');
+        messageInput.disabled = false;
+        sendBtn.disabled = false;
+      } else {
+        statusText.textContent = 'Disconnected';
+        connDot.classList.remove('connected');
+        messageInput.disabled = true;
+        sendBtn.disabled = true;
+      }
+    }
+
+    function addMessage(text, isMe) {
+      const row = document.createElement('div');
+      row.className = `message-row ${isMe ? 'me' : 'other'}`;
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble';
+      bubble.textContent = text;
+      const time = document.createElement('div');
+      time.className = 'message-time';
+      time.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      bubble.appendChild(time);
+      row.appendChild(bubble);
+      chatContainer.appendChild(row);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    // ---------- WebRTC Logic ----------
+    async function createRoom() {
+      isInitiator = true;
+      roomId = crypto.randomUUID();
+      setupPeerConnection();
+      
+      dataChannel = localConnection.createDataChannel('chat');
+      setupDataChannel(dataChannel);
+      
+      const offer = await localConnection.createOffer();
+      await localConnection.setLocalDescription(offer);
+      
+      // Encode offer into URL
+      const invite = {
+        type: 'offer',
+        sdp: btoa(JSON.stringify(localConnection.localDescription))
+      };
+      const inviteLink = `${window.location.origin}${window.location.pathname}#${btoa(JSON.stringify(invite))}`;
+      inviteLinkDisplay.textContent = inviteLink;
+      inviteLinkContainer.style.display = 'block';
+      
+      showToast('Room created! Share the link.');
+      statusText.textContent = 'Waiting for peer...';
+    }
+
+    async function joinRoomFromHash() {
+      const hash = window.location.hash.slice(1);
+      if (!hash) return false;
+      try {
+        const invite = JSON.parse(atob(hash));
+        if (invite.type !== 'offer') return false;
+        
+        isInitiator = false;
+        setupPeerConnection();
+        
+        localConnection.ondatachannel = (event) => {
+          dataChannel = event.channel;
+          setupDataChannel(dataChannel);
+        };
+        
+        const offerDesc = JSON.parse(atob(invite.sdp));
+        await localConnection.setRemoteDescription(new RTCSessionDescription(offerDesc));
+        
+        const answer = await localConnection.createAnswer();
+        await localConnection.setLocalDescription(answer);
+        
+        // For simplicity in this demo without signaling server, we rely on manual exchange.
+        // The initiator would need the answer. Since we can't send answer back easily without server,
+        // we'll simulate using prompt or assume the other peer also gets a link.
+        // Actually, the proper way: Initiator must receive answer. We'll add a manual "Send Answer" step.
+        // But to keep demo simple, we can use a trick: Both peers use the same room ID and we could use a free WebRTC signaling service. 
+        // However, requirement is NO SERVER. So we'll implement a copy-answer mechanism.
+        showToast('Paste the answer link from the other peer to complete connection.');
+        statusText.textContent = 'Offer received. Waiting for answer...';
+        
+        // Generate answer link for initiator
+        const answerInvite = {
+          type: 'answer',
+          sdp: btoa(JSON.stringify(localConnection.localDescription))
+        };
+        const answerLink = `${window.location.origin}${window.location.pathname}#${btoa(JSON.stringify(answerInvite))}`;
+        // Show it for copying
+        const answerBox = document.createElement('div');
+        answerBox.style.marginTop = '16px';
+        answerBox.innerHTML = `<p>📤 Send this answer back to the room creator:</p><div class="link-box">${answerLink}</div><button class="copy-btn" id="copyAnswerBtn">Copy Answer Link</button>`;
+        const setupCard = document.querySelector('.setup-card');
+        const existing = document.getElementById('answerContainer');
+        if (existing) existing.remove();
+        const container = document.createElement('div');
+        container.id = 'answerContainer';
+        container.appendChild(answerBox);
+        setupCard.appendChild(container);
+        document.getElementById('copyAnswerBtn').addEventListener('click', () => {
+          navigator.clipboard.writeText(answerLink);
+          showToast('Answer link copied! Send to creator.');
+        });
+        return true;
+      } catch(e) {
+        console.error(e);
+        return false;
+      }
+    }
+
+    function setupPeerConnection() {
+      localConnection = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+      
+      localConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          console.log('ICE candidate:', event.candidate);
+        }
+      };
+      
+      localConnection.onconnectionstatechange = () => {
+        if (localConnection.connectionState === 'connected') {
+          updateConnectionStatus(true);
+          setupOverlay.style.display = 'none';
+          showToast('🔒 P2P connection established!');
+        } else if (localConnection.connectionState === 'disconnected' || localConnection.connectionState === 'failed') {
+          updateConnectionStatus(false);
+        }
+      };
+    }
+
+    function setupDataChannel(channel) {
+      channel.onopen = () => {
+        updateConnectionStatus(true);
+        setupOverlay.style.display = 'none';
+      };
+      channel.onclose = () => updateConnectionStatus(false);
+      channel.onmessage = (event) => {
+        addMessage(event.data, false);
+      };
+    }
+
+    // ---------- Message Sending ----------
+    function sendMessage() {
+      const msg = messageInput.value.trim();
+      if (!msg || !dataChannel || dataChannel.readyState !== 'open') return;
+      dataChannel.send(msg);
+      addMessage(msg, true);
+      messageInput.value = '';
+    }
+
+    // ---------- Manual Answer Handling ----------
+    async function applyAnswer(answerSdp) {
+      const answerDesc = new RTCSessionDescription(JSON.parse(atob(answerSdp)));
+      await localConnection.setRemoteDescription(answerDesc);
+    }
+
+    // ---------- Event Listeners ----------
+    createRoomBtn.addEventListener('click', createRoom);
+    
+    joinRoomBtn.addEventListener('click', async () => {
+      const input = joinInput.value.trim();
+      if (input) {
+        // If it's an answer link (type: answer)
+        try {
+          const url = new URL(input);
+          const hash = url.hash.slice(1);
+          if (hash) {
+            const invite = JSON.parse(atob(hash));
+            if (invite.type === 'answer') {
+              await applyAnswer(invite.sdp);
+              showToast('Answer applied! Connecting...');
+            } else {
+              // Redirect to the offer link
+              window.location.href = input;
+            }
+          }
+        } catch(e) {
+          // Assume it's a raw answer SDP? Not likely.
+          showToast('Invalid link', true);
+        }
+      } else {
+        // Try join from current hash
+        const success = await joinRoomFromHash();
+        if (!success) showToast('No invite link found', true);
+      }
+    });
+
+    copyInviteBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(inviteLinkDisplay.textContent);
+      showToast('Invite link copied!');
+    });
+
+    sendBtn.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    leaveRoomBtn.addEventListener('click', () => {
+      if (dataChannel) dataChannel.close();
+      if (localConnection) localConnection.close();
+      updateConnectionStatus(false);
+      chatContainer.innerHTML = '';
+      setupOverlay.style.display = 'flex';
+      inviteLinkContainer.style.display = 'none';
+      messageInput.value = '';
+      window.location.hash = '';
+    });
+
+    // Theme
+    function initTheme() {
+      const current = localStorage.getItem('theme') || 'dark';
+      document.body.classList.toggle('light-mode', current === 'light');
+      themeToggle.textContent = current === 'light' ? '☀️' : '🌙';
+      themeToggle.addEventListener('click', () => {
+        const isLight = document.body.classList.toggle('light-mode');
+        localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        themeToggle.textContent = isLight ? '☀️' : '🌙';
+      });
+    }
+    initTheme();
+
+    // Auto-join on load if hash present
+    window.addEventListener('load', async () => {
+      if (window.location.hash) {
+        await joinRoomFromHash();
+      }
+    });
+
+  })();
+</script>
+</body>
+</html>
